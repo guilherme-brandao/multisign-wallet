@@ -6,21 +6,26 @@ contract MultiSignWallet {
     uint approvalLimit;
     address[] owners;
     
-    constructor(address[] memory _owners, uint _limit) {
-        approvalLimit = _limit;
-        owners = _owners;
-        setWallet(owners[0]);
-        setWallet(owners[1]);
-        setWallet(owners[2]);
-    }
-    
-    modifier onlyOwners {
-        require(ownersWallets[msg.sender] == true, "You're not an owner!");
+    modifier onlyOwners() {
+        bool owner = false;
+        for(uint i=0; i < owners.length;i++) {
+            if(owners[i] == msg.sender) {
+                owner = true;
+            }
+        }
+        require(owner == true, "You're not an owner!");
         _;
     }
     
-    mapping (address => bool) public ownersWallets;
+    event RequestCreated(uint _id, uint _amount, address _from, address _to);
+    event ApprovalReceived(uint _id, uint _approvals, address _approver);
+    event TransferFinished(uint _id);
     
+    constructor(address[] memory _owners, uint _limit) {
+        approvalLimit = _limit;
+        owners = _owners;
+    }
+
     mapping (address => mapping(uint => bool)) ownersApprovals;
     
     struct Request {
@@ -33,29 +38,28 @@ contract MultiSignWallet {
     
     Request[] requestList;
     
-    function setWallet(address _wallet) public{
-        ownersWallets[_wallet]=true;
-    }
-    
     function deposit() public payable { }
     
     function requestTransfer(uint _amount, address payable _to) public onlyOwners {
         address[] memory emptyAddressList;
+        emit RequestCreated(requestList.length, _amount, msg.sender, _to);
         requestList.push(Request(requestList.length, _amount, _to, emptyAddressList, false));
     }
     
-    function approveRequest(uint indexRequest) public onlyOwners {
-        require(ownersApprovals[msg.sender][indexRequest] == false, "You already approved this request!");
-        require(requestList[indexRequest].done == false, "The request is already done!");
+    function approveRequest(uint _indexRequest) public onlyOwners {
+        require(ownersApprovals[msg.sender][_indexRequest] == false, "You already approved this request!");
+        require(requestList[_indexRequest].done == false, "The request is already done!");
         
-        Request storage request = requestList[indexRequest];
+        Request storage request = requestList[_indexRequest];
+        emit ApprovalReceived(_indexRequest, request.approvals.length, msg.sender);
+        
         request.approvals.push(msg.sender);
-        ownersApprovals[msg.sender][indexRequest] = true;
-        
+        ownersApprovals[msg.sender][_indexRequest] = true;
         
         if(request.approvals.length >= approvalLimit) {
             request.to.transfer(request.amount);
             request.done = true;
+            emit TransferFinished( _indexRequest);
         }
     }
     
@@ -63,4 +67,3 @@ contract MultiSignWallet {
         return requestList;
     }
 }
-    
