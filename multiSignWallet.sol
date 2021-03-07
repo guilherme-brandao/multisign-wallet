@@ -3,8 +3,17 @@ pragma abicoder v2;
 
 contract MultiSignWallet {
     
+    struct Request {
+        uint requestId;
+        uint amount;
+        address payable to;
+        address[] approvals;
+        bool done;
+    }
+    
     uint approvalLimit;
     address[] owners;
+    Request[] requestList;
     
     modifier onlyOwners() {
         bool owner = false;
@@ -20,28 +29,23 @@ contract MultiSignWallet {
     event RequestCreated(uint _id, uint _amount, address _from, address _to);
     event ApprovalReceived(uint _id, uint _approvals, address _approver);
     event TransferFinished(uint _id);
+
+    mapping (address => mapping(uint => bool)) ownersApprovals;
+    mapping(address => uint) balance;
     
     constructor(address[] memory _owners, uint _limit) {
         approvalLimit = _limit;
         owners = _owners;
     }
-
-    mapping (address => mapping(uint => bool)) ownersApprovals;
     
-    struct Request {
-        uint requestId;
-        uint amount;
-        address payable to;
-        address[] approvals;
-        bool done;
+    function deposit() public payable {
+        balance[msg.sender] += msg.value;
     }
     
-    Request[] requestList;
-    
-    function deposit() public payable { }
-    
     function requestTransfer(uint _amount, address payable _to) public onlyOwners {
+        require(balance[msg.sender] >= _amount, "Balance not sufficient");
         address[] memory emptyAddressList;
+        balance[msg.sender] -= _amount;
         emit RequestCreated(requestList.length, _amount, msg.sender, _to);
         requestList.push(Request(requestList.length, _amount, _to, emptyAddressList, false));
     }
@@ -59,6 +63,9 @@ contract MultiSignWallet {
         if(request.approvals.length >= approvalLimit) {
             request.to.transfer(request.amount);
             request.done = true;
+            
+            balance[request.to] += request.amount;
+            
             emit TransferFinished( _indexRequest);
         }
     }
@@ -66,4 +73,9 @@ contract MultiSignWallet {
     function getRequests() public view returns (Request[] memory) {
         return requestList;
     }
+    
+    function getBalance() public view returns (uint) {
+        return balance[msg.sender];
+    }
 }
+   
