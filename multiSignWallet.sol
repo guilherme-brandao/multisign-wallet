@@ -2,10 +2,11 @@ pragma solidity 0.7.5;
 pragma abicoder v2;
 
 contract MultiSignWallet {
-
+    
     struct Request {
         uint requestId;
         uint amount;
+        address from;
         address payable to;
         uint approvals;
         bool done;
@@ -30,7 +31,7 @@ contract MultiSignWallet {
     event ApprovalReceived(uint _id, uint _approvals, address _approver);
     event TransferFinished(uint _id);
 
-    mapping(address => mapping(uint => bool)) ownersApprovals;
+    mapping (address => mapping(uint => bool)) ownersApprovals;
     mapping(address => uint) balance;
     mapping(uint => Request) public requests;
     
@@ -50,13 +51,15 @@ contract MultiSignWallet {
         
         emit RequestCreated(requestList.length, _amount, msg.sender, _to);
         
-        requests[requestList.length] = (Request(requestList.length, _amount, _to, 0, false));
+        requestList.push(requestList.length);
+        
+        requests[requestList.length-1] = (Request(requestList.length-1, _amount, msg.sender, _to, 0, false));
         
     }
     
     function approveRequest(uint _indexRequest) external onlyOwners {
         require(ownersApprovals[msg.sender][_indexRequest] == false, "You already approved this request!");
-        require(requests[_indexRequest].done == false, "The request is already done or were not created yet!");
+        require(requests[_indexRequest].done == false, "The request is already done!");
         
         Request memory request = requests[_indexRequest];
         
@@ -66,13 +69,33 @@ contract MultiSignWallet {
         ownersApprovals[msg.sender][_indexRequest] = true;
         
         if(request.approvals >= approvalLimit) {
-            request.to.transfer(request.amount);
             request.done = true;
-            
             balance[request.to] += request.amount;
-            
-            emit TransferFinished( _indexRequest);
+
+            (bool success,) = request.to.call{value: request.amount}("");
+            if(!success) {
+                request.done = false;
+                balance[request.to] -= request.amount;
+            } else {
+                emit TransferFinished( _indexRequest);
+            }
         }
+    }
+    
+    function cancelRequest(uint _indexRequest) external {
+        require(requests[_indexRequest].done == false, "The request is already done!");
+        require(requests[_indexRequest].from == msg.sender, "You're not the sender of the request!");
+        
+        uint indexLastRequest = requestList[requestList.length-1];
+        
+        requestList[_indexRequest] = indexLastRequest;
+        requestList[indexLastRequest] = _indexRequest;
+        
+        balance[requests[indexLastRequest].from] += requests[indexLastRequest].amount;
+        
+        msg.sender.call{value: requests[indexLastRequest].amount}("");
+        delete requests[requests[indexLastRequest].requestId];
+        requestList.pop();
     }
     
     function getRequest(uint _indexRequest) public view returns (Request memory) {
