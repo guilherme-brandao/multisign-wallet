@@ -1,7 +1,11 @@
 pragma solidity 0.7.5;
 pragma abicoder v2;
 
+import "./SafeMath.sol";
+
 contract MultiSignWallet {
+
+    using SafeMath for uint;
     
     struct Request {
         uint requestId;
@@ -41,13 +45,13 @@ contract MultiSignWallet {
     }
     
     function deposit() public payable {
-        balance[msg.sender] += msg.value;
+         balance[msg.sender] = balance[msg.sender].add(msg.value);
     }
     
     function requestTransfer(uint _amount, address payable _to) external onlyOwners {
         require(balance[msg.sender] >= _amount, "Balance not sufficient");
         
-        balance[msg.sender] -= _amount;
+        balance[msg.sender] = balance[msg.sender].sub(_amount);
         
         emit RequestCreated(requestList.length, _amount, msg.sender, _to);
         
@@ -70,12 +74,12 @@ contract MultiSignWallet {
         
         if(request.approvals >= approvalLimit) {
             request.done = true;
-            balance[request.to] += request.amount;
+            balance[request.to] = balance[request.to].add(request.amount);
 
             (bool success,) = request.to.call{value: request.amount}("");
             if(!success) {
                 request.done = false;
-                balance[request.to] -= request.amount;
+                balance[request.to] = balance[request.to].sub(request.amount);
             } else {
                 emit TransferFinished( _indexRequest);
             }
@@ -91,10 +95,10 @@ contract MultiSignWallet {
         requestList[_indexRequest] = indexLastRequest;
         requestList[indexLastRequest] = _indexRequest;
         
-        balance[requests[indexLastRequest].from] += requests[indexLastRequest].amount;
+        balance[requests[indexLastRequest].from] =  balance[requests[indexLastRequest].from].add(requests[indexLastRequest].amount);
         
         msg.sender.call{value: requests[indexLastRequest].amount}("");
-        delete requests[requests[indexLastRequest].requestId];
+        delete requests[indexLastRequest];
         requestList.pop();
     }
     
