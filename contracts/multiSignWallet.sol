@@ -1,7 +1,7 @@
-pragma solidity 0.7.5;
+pragma solidity 0.8.3;
 pragma abicoder v2;
 
-import "./SafeMath.sol";
+import "./Safemath.sol";
 
 contract MultiSignWallet {
 
@@ -76,7 +76,7 @@ contract MultiSignWallet {
             request.done = true;
             balance[request.to] = balance[request.to].add(request.amount);
 
-            (bool success,) = request.to.call{value: request.amount}("");
+            (bool success, ) = request.to.call{value: request.amount}("");
             if(!success) {
                 request.done = false;
                 balance[request.to] = balance[request.to].sub(request.amount);
